@@ -83,10 +83,3 @@ def process_client_data(RAW_CLIENT_DATA) -> list:
                 new_data_value = "".join(data_value)
                 client_data[data_key] = new_data_value
     return RAW_CLIENT_DATA
-
-
-# if __name__ == '__main__':
-#     x = pull_raw_data(DIRECTORY_PATH=CLIENT_DIRECTORY_PATH, FIELDS=ClientFormFields.fields_list)
-#     y = process_client_data(RAW_CLIENT_DATA=x)
-#     for z in y:
-#         print(z)
