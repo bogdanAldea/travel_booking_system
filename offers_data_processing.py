@@ -2,6 +2,7 @@ import re
 import os
 from travel_booking_system.data_fields import OfferFormFields
 from travel_booking_system import text_cleanup
+from travel_booking_system.files_backend import pull_raw_data
 
 """
 Module that pull data from offers txt files
@@ -10,119 +11,89 @@ Module that pull data from offers txt files
 # regex patterns
 date_pattern = "([0-9]+[\/]+[0-9]+)"
 after_colon_pattern = "(?<=:\s).+"
-rooms_pattern = "(?<=\t\-\s)(\d\s\w+)\sx\s(\d\s\w+)\sx\s(\d+\s\w.+)"
-
-# directory of offers txt files
-OFFERS_DIRECTORY_PATH = "D:\\Coding\\Coding\\Projects\\Proiect_IT_School_v2\\travel_booking_system\\oferte"
+rooms_pattern = "(\d+\s\w+)\sx\s(\d+\s\w+)\sx\s(\d+\s\w.+)"
 
 
-def pull_partial_offers_data(DIRECTORY_PATH):
+def separate_data_type(RAW_DATA_LIST: list) -> tuple:
     """
-    :param DIRECTORY_PATH:
-    :param FIELDS:
+    Function iterates the newly extracted data from file and separates it into 3 lists:
+    - list of string data
+    - list of datetime data
+    - list of dict data
+    :param RAW_DATA_LIST
+    :return: tuple with three lists mentioned above
+    """
+
+    room_data = list()
+    datetime_data = list()
+    string_data = list()
+
+    for returned_list_of_data in RAW_DATA_LIST:
+
+        # get a list of dict formatted objects representing accommodation
+        rooms_available = text_cleanup.get_rooms_object(data_list=returned_list_of_data, regex_pattern=rooms_pattern, separator=" ")
+        room_data.append(rooms_available)
+
+        # get a list of dict formatted datetime objects
+        dates_available = text_cleanup.get_dates(data_list=returned_list_of_data, regex_pattern=date_pattern, separator="/", start_key="check_in", end_key="check_out")
+        datetime_data.append(dates_available)
+
+        # get a list with everything that doesn't match the rooms/dates regex pattern
+        for string_item in returned_list_of_data:
+            if not re.match(pattern=date_pattern, string=string_item) and not re.match(pattern=rooms_pattern, string=string_item):
+                string_data.append(string_item)
+
+    return string_data, datetime_data, room_data
+
+
+def create_package_dictionary(RAW_DATA: list, STRING_OBJECTS: list, DATETIME_OBJECTS: list, ROOM_OBJECTS: list) -> list:
+    """
+
+    :param RAW_DATA:
+    :param STRING_OBJECTS:
+    :param DATETIME_OBJECTS:
+    :param ROOM_OBJECTS:
     :return:
     """
-    exporting_file_data = list()
+    string_values = iter(STRING_OBJECTS)
+    datetime_values = iter(DATETIME_OBJECTS)
+    room_values = iter(ROOM_OBJECTS)
+    list_of_packages = list()
 
-    # get files only with .txt extension
-    offers_data_files = [data_file for data_file in os.listdir(OFFERS_DIRECTORY_PATH) if data_file.endswith(".txt")]
+    for X in range(len(RAW_DATA)):
+        # each clean file data will be formatted as a dict here
+        package_data_representation = dict()
+        package_data_key = iter(OfferFormFields.fields_list)
+        while True:
+            try:
+                KEY = next(package_data_key)
 
-    # iterate over filenames list
-    for file_name in offers_data_files:
-        file_name_path = os.path.join(DIRECTORY_PATH, file_name)
-        data_to_read = open(file=file_name_path, mode="r")
-        exporting_file_data.append(data_to_read.readlines())
-    return exporting_file_data
+                if KEY == OfferFormFields.Dates:
+                    package_data_value = next(datetime_values)
+
+                elif KEY == OfferFormFields.Rooms:
+                    package_data_value = next(room_values)
+
+                else:
+                    package_data_value = next(string_values)
+
+                package_data_representation[KEY] = package_data_value
+            except StopIteration:
+                break
+
+        list_of_packages.append(package_data_representation)
+    return list_of_packages
 
 
-def pull_full_data(PARTIAL_DATA):
+def process_package_offers():
     """
-
-    :param PARTIAL_DATA:
-    :return:
+    Function packs all above functions and return a list with clean formatted dictionaries representing all data from "oferte" files
+    :return: list of dists
     """
-    export_full_data_list = list()
-    for partial_data_list in PARTIAL_DATA:
-        new_data_list = list()
-        list_of_dates = list()
-        list_of_rooms = list()
-
-        for data_item_string in partial_data_list:
-            if re.search(pattern=after_colon_pattern, string=data_item_string):
-                new_data_list.append("".join(re.findall(pattern=after_colon_pattern, string=data_item_string)))
-
-            elif re.search(pattern=date_pattern, string=data_item_string):
-                list_of_dates.append(re.findall(pattern=date_pattern, string=data_item_string))
-
-            elif re.search(pattern=rooms_pattern, string=data_item_string):
-                result = re.findall(pattern=rooms_pattern, string=data_item_string)
-                for result_item in result:
-                    list_of_rooms.append(list(result_item))
-
-        new_data_list.insert(2, list_of_dates)
-        new_data_list.append(list_of_rooms)
-        export_full_data_list.append(new_data_list)
-    return export_full_data_list
-
-
-def convert_to_date(DATE_VALUES):
-    """
-
-    :param DATE_VALUES:
-    :return:
-    """
-    date_objects_list = list()
-    for string_list in DATE_VALUES:
-        date_dict = text_cleanup.get_date_object(raw_param_data=string_list, separator="/", start_key="Start", end_key="End")
-        date_objects_list.append(date_dict)
-    return date_objects_list
-
-
-def process_offers_data(OFFERS_FULL_DATA):
-    """
-
-    :param OFFERS_FULL_DATA:
-    :return:
-    """
-    file_data_list = list()
-    for data_item in OFFERS_FULL_DATA:
-        data_dictionary_object = dict()
-        data_key = iter(OfferFormFields.fields_list)
-        data_value = iter(data_item)
-        counter = 0
-
-        while counter != len(data_item):
-            key = next(data_key)
-            value = next(data_value)
-
-            if key == OfferFormFields.MinNumberOfPersons or key == OfferFormFields.MaxNumberOfPersons:
-                data_dictionary_object[key] = int(value)
-
-            elif key == OfferFormFields.Dates:
-                clean_value = convert_to_date(DATE_VALUES=value)
-                data_dictionary_object[key] = clean_value
-
-            elif key == OfferFormFields.Rooms:
-                clean_value = text_cleanup.get_room_object(raw_param_data=value, separator=" ")
-                data_dictionary_object[key] = clean_value
-
-            else:
-                data_dictionary_object[key] = value
-            counter += 1
-        file_data_list.append(data_dictionary_object)
-    return file_data_list
-
-
-# if __name__ == '__main__':
-#     partial_data = pull_partial_offers_data(DIRECTORY_PATH=OFFERS_DIRECTORY_PATH)
-#     full_data = pull_full_data(PARTIAL_DATA=partial_data)
-#     result = process_offers_data(OFFERS_FULL_DATA=full_data)
-#     for item in result:
-#         print(item)
-
-
-
-
+    OFFERS_DIRECTORY_PATH = "D:\\Coding\\Coding\\Projects\\Proiect_IT_School_v2\\travel_booking_system\\oferte"
+    raw_data_pull = pull_raw_data(DIRECTORY_PATH=OFFERS_DIRECTORY_PATH, FILE_EXTENSION=".txt")
+    string_values, datetime_values, room_values = separate_data_type(RAW_DATA_LIST=raw_data_pull)
+    return create_package_dictionary(RAW_DATA=raw_data_pull, STRING_OBJECTS=string_values, DATETIME_OBJECTS=datetime_values, ROOM_OBJECTS=room_values)
 
 
 
